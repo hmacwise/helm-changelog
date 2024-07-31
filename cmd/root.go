@@ -14,6 +14,7 @@ import (
 )
 
 var changelogFilename string
+var chartsDirectory string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -26,6 +27,12 @@ var rootCmd = &cobra.Command{
 		currentDir, err := os.Getwd()
 		if err != nil {
 			log.Fatal(err)
+		}
+
+		if chartsDirectory != "." {
+			currentDir = filepath.Join(currentDir, chartsDirectory)
+		} else {
+			log.Infof("Scanning all subdirectories for Helm Charts")
 		}
 
 		g := git.Git{Log: log}
@@ -75,6 +82,7 @@ func Execute() {
 
 	rootCmd.PersistentFlags().StringVarP(&changelogFilename, "filename", "f", "Changelog.md", "Filename for changelog")
 	rootCmd.PersistentFlags().StringVarP(&v, "verbosity", "v", logrus.WarnLevel.String(), "Log level (debug, info, warn, error, fatal, panic)")
+	rootCmd.PersistentFlags().StringVarP(&chartsDirectory, "dirs", "d", ".", "Relative path to directories to search for Helm Charts. By default scans all subdirectories of working directory.")
 
 	cobra.CheckErr(rootCmd.Execute())
 }

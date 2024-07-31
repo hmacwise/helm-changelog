@@ -73,6 +73,7 @@ Usage:
 Flags:
   -h, --help               help for helm-changelog
   -v, --verbosity string   Log level (debug, info, warn, error, fatal, panic (default "warning")
+  -d, --dirs string        Comma-separated list of relative paths to subdirectories to search for Helm Charts. By default scans all subdirectories of working directory.
 
 # Run helm-changelog creator with default params
 $ ./bin/helm-changelog
