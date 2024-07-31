@@ -82,7 +82,7 @@ func Execute() {
 
 	rootCmd.PersistentFlags().StringVarP(&changelogFilename, "filename", "f", "Changelog.md", "Filename for changelog")
 	rootCmd.PersistentFlags().StringVarP(&v, "verbosity", "v", logrus.WarnLevel.String(), "Log level (debug, info, warn, error, fatal, panic)")
-	rootCmd.PersistentFlags().StringVarP(&chartsDirectory, "dirs", "d", ".", "Relative path to directories to search for Helm Charts. By default scans all subdirectories of working directory.")
+	rootCmd.PersistentFlags().StringVarP(&chartsDirectory, "directory", "d", ".", "Relative path to directories to search for Helm Charts. By default scans all subdirectories of working directory.")
 
 	cobra.CheckErr(rootCmd.Execute())
 }
