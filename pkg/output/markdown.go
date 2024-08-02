@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"os/exec"
+	"regexp"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 
@@ -69,6 +72,52 @@ func Markdown(log *logrus.Logger, changeLogFilePath string, releases []*helm.Rel
 		for _, l := range release.Commits {
 			f.WriteString(fmt.Sprintf("* %s\n", l.Subject))
 		}
+
+		// Fetch pull request description using `gh` CLI tool
+		f.WriteString("\n")
+		f.WriteString("### Pull request description\n\n")
+		f.WriteString("```\n")
+
+		cmd := exec.Command("gh", "pr", "list", "--state", "all", "--search", release.Commits[0].Commit)
+		commitMetadata, err := cmd.Output()
+		if err != nil {
+			log.Fatalf("Failed to run command: %s\nError: %s", cmd, err)
+		}
+
+		// Split string by newline delimiter
+		lines := strings.Split(string(commitMetadata), "\n")
+	
+		// Use a regular expression to find the first number in the last line
+		re := regexp.MustCompile(`\d+`)
+		pullRequestNumber := re.FindString(lines[len(lines)-2])
+		if pullRequestNumber == "" {
+			log.Fatalf("No PR number found in Pull Request metadata: %s", lines[len(lines)-2])
+		}
+
+		// log.Infof("Pull request number: %s", pullRequestNumber)
+
+		cmd = exec.Command("gh", "pr", "view", string(pullRequestNumber))
+		pullRequestMetadata, err := cmd.Output()
+		if err != nil {
+			log.Fatalf("Failed to run command: %s\nError: %s", cmd, err)
+		}
+
+		// Define the regular expression pattern
+		re = regexp.MustCompile(`(?s)## Context(.*?)## Checklist`)
+
+		// Find the text between ## Context and ## Checklist
+		matches := re.FindStringSubmatch(string(pullRequestMetadata))
+		if len(matches) < 2 {
+			log.Fatalf("No match found")
+		}
+	
+		// Extract and print the matched text
+		pullRequestDescription := matches[1]
+		fmt.Println("Extracted text between ## Context and ## Checklist:")
+
+		f.WriteString(string(pullRequestDescription))
+
+		f.WriteString("```\n")
 
 		f.WriteString("\n")
 		f.WriteString("### Default value changes\n\n")
