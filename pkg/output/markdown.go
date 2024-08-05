@@ -2,9 +2,11 @@ package output
 
 import (
 	"fmt"
+	"io"
+	"encoding/json"
+	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"regexp"
 	"strings"
 
@@ -12,6 +14,9 @@ import (
 
 	"github.com/mogensen/helm-changelog/pkg/helm"
 )
+
+// GitHub PAT
+var GITHUB_TOKEN = os.Getenv("GITHUB_TOKEN")
 
 // Markdown creates a markdown representation of the changelog at the changeLogFilePath path
 func Markdown(log *logrus.Logger, changeLogFilePath string, releases []*helm.Release) {
@@ -73,51 +78,16 @@ func Markdown(log *logrus.Logger, changeLogFilePath string, releases []*helm.Rel
 			f.WriteString(fmt.Sprintf("* %s\n", l.Subject))
 		}
 
-		// Fetch pull request description using `gh` CLI tool
+		// Fetch pull request description from GitHub
 		f.WriteString("\n")
 		f.WriteString("### Pull request description\n\n")
-		f.WriteString("```\n")
+		f.WriteString("```")
 
-		cmd := exec.Command("gh", "pr", "list", "--state", "all", "--search", release.Commits[0].Commit)
-		commitMetadata, err := cmd.Output()
-		if err != nil {
-			log.Fatalf("Failed to run command: %s\nError: %s", cmd, err)
-		}
+		pullRequestDescription := queryGithubForPRData(log, *release)
 
-		// Split string by newline delimiter
-		lines := strings.Split(string(commitMetadata), "\n")
-	
-		// Use a regular expression to find the first number in the last line
-		re := regexp.MustCompile(`\d+`)
-		pullRequestNumber := re.FindString(lines[len(lines)-2])
-		if pullRequestNumber == "" {
-			log.Fatalf("No PR number found in Pull Request metadata: %s", lines[len(lines)-2])
-		}
+		f.WriteString(pullRequestDescription)
 
-		// log.Infof("Pull request number: %s", pullRequestNumber)
-
-		cmd = exec.Command("gh", "pr", "view", string(pullRequestNumber))
-		pullRequestMetadata, err := cmd.Output()
-		if err != nil {
-			log.Fatalf("Failed to run command: %s\nError: %s", cmd, err)
-		}
-
-		// Define the regular expression pattern
-		re = regexp.MustCompile(`(?s)## Context(.*?)## Checklist`)
-
-		// Find the text between ## Context and ## Checklist
-		matches := re.FindStringSubmatch(string(pullRequestMetadata))
-		if len(matches) < 2 {
-			log.Fatalf("No match found")
-		}
-	
-		// Extract and print the matched text
-		pullRequestDescription := matches[1]
-		fmt.Println("Extracted text between ## Context and ## Checklist:")
-
-		f.WriteString(string(pullRequestDescription))
-
-		f.WriteString("```\n")
+		f.WriteString("```")
 
 		f.WriteString("\n")
 		f.WriteString("### Default value changes\n\n")
@@ -139,4 +109,67 @@ func Markdown(log *logrus.Logger, changeLogFilePath string, releases []*helm.Rel
 
 func badge(key, value, icon, style string) string {
 	return fmt.Sprintf("![%s: %s](https://img.shields.io/static/v1?label=%s&message=%s&color=%s&logo=%s)\n", key, value, key, url.QueryEscape(value), style, icon)
+}
+
+func queryGithubForPRData(log *logrus.Logger, release helm.Release) string {
+	// Perform request to GH api to view PR metadata
+	if GITHUB_TOKEN == "" {
+		log.Fatal("GITHUB_TOKEN environment variable is not set")
+	}
+
+	getCommitMetadataUrl := "https://api.github.com/repos/transferwise/security-k8s-charts/commits/" + release.Commits[0].Commit + "/pulls"
+
+	req, err := http.NewRequest("GET", getCommitMetadataUrl, nil)
+    if err != nil {
+        log.Fatalf("Failed to create request: %s", err)
+    }
+
+	// Set the authorization header
+	req.Header.Set("Authorization", "token " + GITHUB_TOKEN)
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	// Create the HTTP client and send the request
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Fatalf("Failed to send request: %s", err)
+	}
+	defer resp.Body.Close()
+
+	// Read and parse the response
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatalf("Failed to read response body: %s", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		log.Fatalf("GitHub API request failed with status: %s\nResponse: %s", resp.Status, body)
+	}
+
+	var result []map[string]interface{}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		log.Fatalf("Failed to parse response body: %s", err)
+	}
+
+	// Access a specific field from the JSON object
+	pullRequestMetadata, ok := result[0]["body"].(string)
+	if !ok {
+		log.Fatalf("Field 'body' not found in the response")
+	}
+
+	// Define the regular expression pattern
+	re := regexp.MustCompile(`(?s)## Context(.*?)## Checklist`)
+
+	// Find the text between ## Context and ## Checklist
+	matches := re.FindStringSubmatch(string(pullRequestMetadata))
+	if len(matches) < 2 {
+		log.Fatalf("No match found")
+	}
+
+	// Extract and print the matched text
+	pullRequestDescription := matches[1]
+	log.Infof("Extracted PR description for commit sha %s in PR %d", release.Commits[0].Commit, int(result[0]["number"].(float64)))
+
+	return strings.ReplaceAll(pullRequestDescription, "\n", "")
 }
