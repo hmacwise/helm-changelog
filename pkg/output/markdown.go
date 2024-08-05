@@ -1,13 +1,15 @@
 package output
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
-	"encoding/json"
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"regexp"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 
@@ -18,7 +20,7 @@ import (
 var GITHUB_TOKEN = os.Getenv("GITHUB_TOKEN")
 
 // Markdown creates a markdown representation of the changelog at the changeLogFilePath path
-func Markdown(log *logrus.Logger, changeLogFilePath string, releases []*helm.Release) {
+func Markdown(log *logrus.Logger, changeLogFilePath string, releases []*helm.Release, githubFormat string) {
 
 	// reverse commits
 	for _, release := range releases {
@@ -82,7 +84,13 @@ func Markdown(log *logrus.Logger, changeLogFilePath string, releases []*helm.Rel
 		f.WriteString("### Pull request description\n\n")
 		f.WriteString("```")
 
-		pullRequestDescription := queryGithubForPRData(log, *release)
+		pullRequestDescription := ""
+
+		if githubFormat == "api" {
+			pullRequestDescription = githubApiPullRequestMetadata(log, *release)
+		} else if githubFormat == "cli" {
+			pullRequestDescription = githubCliPullRequestMetadata(log, *release)
+		}
 
 		f.WriteString(pullRequestDescription)
 
@@ -110,7 +118,7 @@ func badge(key, value, icon, style string) string {
 	return fmt.Sprintf("![%s: %s](https://img.shields.io/static/v1?label=%s&message=%s&color=%s&logo=%s)\n", key, value, key, url.QueryEscape(value), style, icon)
 }
 
-func queryGithubForPRData(log *logrus.Logger, release helm.Release) string {
+func githubApiPullRequestMetadata(log *logrus.Logger, release helm.Release) string {
 	// Perform request to GH api to view PR metadata
 	if GITHUB_TOKEN == "" {
 		log.Fatal("GITHUB_TOKEN environment variable is not set")
@@ -172,3 +180,43 @@ func queryGithubForPRData(log *logrus.Logger, release helm.Release) string {
 
 	return pullRequestDescription
 }
+
+func githubCliPullRequestMetadata(log *logrus.Logger, release helm.Release) string {
+	cmd := exec.Command("gh", "pr", "list", "--state", "all", "--search", release.Commits[0].Commit)
+		commitMetadata, err := cmd.Output()
+		if err != nil {
+			log.Fatalf("Failed to run command: %s\nError: %s", cmd, err)
+		}
+
+		// Split string by newline delimiter
+		lines := strings.Split(string(commitMetadata), "\n")
+
+		// Use a regular expression to find the first number in the last line
+		re := regexp.MustCompile(`\d+`)
+		pullRequestNumber := re.FindString(lines[len(lines)-2])
+		if pullRequestNumber == "" {
+			log.Fatalf("No PR number found in Pull Request metadata: %s", lines[len(lines)-2])
+		}
+
+		// log.Infof("Pull request number: %s", pullRequestNumber)
+
+		cmd = exec.Command("gh", "pr", "view", string(pullRequestNumber))
+		pullRequestMetadata, err := cmd.Output()
+		if err != nil {
+			log.Fatalf("Failed to run command: %s\nError: %s", cmd, err)
+		}
+
+		// Define the regular expression pattern
+		re = regexp.MustCompile(`(?s)## Context(.*?)## Checklist`)
+
+		// Find the text between ## Context and ## Checklist
+		matches := re.FindStringSubmatch(string(pullRequestMetadata))
+		if len(matches) < 2 {
+			log.Fatalf("No match found")
+		}
+
+		// Extract and print the matched text
+		pullRequestDescription := matches[1]
+		log.Infof("Extracted PR description for commit sha %s in PR %s", release.Commits[0].Commit, pullRequestNumber)
+		return pullRequestDescription
+	}

@@ -15,6 +15,7 @@ import (
 
 var changelogFilename string
 var chartsDirectory string
+var githubFormat string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -43,6 +44,10 @@ var rootCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
+		if githubFormat != "api" && githubFormat != "cli" {
+			log.Fatalf("Invalid GitHub format. Please use 'api' or 'cli'.")
+		}
+
 		for _, chartFileFullPath := range fileList {
 			log.Infof("Handling: %s\n", chartFileFullPath)
 
@@ -66,7 +71,7 @@ var rootCmd = &cobra.Command{
 			releases := helm.CreateHelmReleases(log, chartFile, relativeChartDir, g, allCommits)
 
 			changeLogFilePath := filepath.Join(fullChartDir, changelogFilename)
-			output.Markdown(log, changeLogFilePath, releases)
+			output.Markdown(log, changeLogFilePath, releases, githubFormat)
 		}
 	},
 }
@@ -86,6 +91,7 @@ func Execute() {
 	rootCmd.PersistentFlags().StringVarP(&changelogFilename, "filename", "f", "Changelog.md", "Filename for changelog")
 	rootCmd.PersistentFlags().StringVarP(&v, "verbosity", "v", logrus.WarnLevel.String(), "Log level (debug, info, warn, error, fatal, panic)")
 	rootCmd.PersistentFlags().StringVarP(&chartsDirectory, "directory", "d", ".", "Relative path to directories to search for Helm Charts. By default scans all subdirectories of working directory.")
+	rootCmd.PersistentFlags().StringVarP(&githubFormat, "github", "g", "api", "Select preferred method to interact with GitHub (api, cli). Using the API requires a GitHub token set as an environment variable, while the CLI must be preconfigured.")
 
 	cobra.CheckErr(rootCmd.Execute())
 }
