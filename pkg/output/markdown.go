@@ -171,5 +171,5 @@ func queryGithubForPRData(log *logrus.Logger, release helm.Release) string {
 	pullRequestDescription := matches[1]
 	log.Infof("Extracted PR description for commit sha %s in PR %d", release.Commits[0].Commit, int(result[0]["number"].(float64)))
 
-	return strings.ReplaceAll(pullRequestDescription, "\n", "")
+	return pullRequestDescription
 }
