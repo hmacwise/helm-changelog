@@ -73,7 +73,8 @@ Usage:
 Flags:
   -h, --help               help for helm-changelog
   -v, --verbosity string   Log level (debug, info, warn, error, fatal, panic (default "warning")
-  -d, --directory string        Relative path to directories to search for Helm Charts. By default scans all subdirectories of working directory.
+  -d, --directory string   Relative path to directories to search for Helm Charts. By default scans all subdirectories of working directory.
+  -g, --github string      Select preferred method to interact with GitHub (api, cli). Using the API requires a GitHub token set as an environment variable, while the CLI must be preconfigured.
 
 # Run helm-changelog creator with default params
 $ ./bin/helm-changelog
