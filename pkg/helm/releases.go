@@ -46,24 +46,6 @@ func CreateHelmReleases(log *logrus.Logger, chartFile, chartDir string, g git.Gi
 		}
 	}
 
-	// Check if we have any unreleased commits
-	if len(releaseCommits) > 0 {
-		chartContent, err := g.GetFileContent("HEAD", chartFile)
-		if err == nil {
-			chart, err := GetChart(strings.NewReader(chartContent))
-			if err != nil {
-				log.Warnf("Ignoring Chart.yaml file that cannot be parsed: %s", err)
-			} else {
-				chart.Version = "Next Release"
-				res = append(res, &Release{
-					ReleaseDate: nil,
-					Chart:       chart,
-					Commits:     releaseCommits,
-				})
-			}
-		}
-	}
-
 	// Diff values files across versions
 	createValueDiffs(res, g, chartFile, chartDir)
 
